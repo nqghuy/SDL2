@@ -1,6 +1,7 @@
 #include <bits/stdc++.h>
 #include <SDL.h>
 #include <SDL_image.h>
+#include <SDL_ttf.h>
 
 using namespace std;
 
@@ -19,6 +20,9 @@ public:
 
     //load img from file
     bool loadFromFile(string);
+
+    //create image from font string
+    bool loadFromRenderedText(string, SDL_Color);
 
     //render texture at given point
     void render(int, int, SDL_Rect* = NULL, double angle = 0, SDL_Point* center = NULL, SDL_RendererFlip = SDL_FLIP_NONE);
@@ -49,8 +53,9 @@ SDL_Window* gWindow = NULL;
 //the window renderer
 SDL_Renderer* gRenderer = NULL;
 
-//arrow texture
-LTexture gArrowTexture;
+TTF_Font *gFont = NULL;
+
+LTexture gTextTexture;
 
 //starts up SDL and creates window
 bool init();
@@ -79,11 +84,6 @@ int main(int argc, char *argv[]){
             SDL_Event e;
             bool quit = false;
 
-            //angle to rotate
-            double angle = 0;
-
-            //flip type
-            SDL_RendererFlip flip = SDL_FLIP_NONE;
             while (!quit)
             {
                 while (SDL_PollEvent(&e)){// handle events on queue
@@ -91,32 +91,13 @@ int main(int argc, char *argv[]){
                     {
                         quit = true;
                     }
-                    else if (e.type == SDL_KEYDOWN){
-                        switch (e.key.keysym.sym)
-                        {
-                        case SDLK_a:
-                            angle += 60;
-                            break;
-                        case SDLK_d:
-                            angle -= 60;
-                            break;
-                        case SDLK_q:
-                            flip = SDL_FLIP_HORIZONTAL;
-                            break;
-                        case SDLK_w:
-                            flip = SDL_FLIP_NONE;
-                            break;
-                        case SDLK_e:
-                            flip = SDL_FLIP_VERTICAL;
-                            break;
-                        }
-                    }
                 }
                 // clear screen
                 SDL_SetRenderDrawColor(gRenderer, 0xFF, 0xFF, 255, 0xFF);
                 SDL_RenderClear(gRenderer);
 
-                gArrowTexture.render((SCREEN_WIDTH - gArrowTexture.getWidth()) / 2, (SCREEN_HEIGHT - gArrowTexture.getHeight()) / 2, NULL, angle, NULL, flip);
+                gTextTexture.render((SCREEN_WIDTH - gTextTexture.getWidth()) / 2, (SCREEN_HEIGHT - gTextTexture.getHeight()) / 2);
+
                 //update screen
                 SDL_RenderPresent(gRenderer);
 
@@ -160,6 +141,34 @@ bool LTexture :: loadFromFile(string file){
     }
     mTexture = newTexture;
     return mTexture != NULL;
+}
+
+bool LTexture :: loadFromRenderedText(string textTexture, SDL_Color color){
+    free();
+    // final texture
+    SDL_Texture *newTexture = NULL;
+
+    //surface to create texture
+    SDL_Surface *newSurface = NULL;
+    newSurface = TTF_RenderText_Solid(gFont, textTexture.c_str(), color);
+    if (newSurface == NULL){
+        cout << "unable to load new surface. ERROR: " << TTF_GetError() << endl;
+    }
+    else{
+        newTexture = SDL_CreateTextureFromSurface(gRenderer, newSurface);
+        if (newTexture == NULL)
+        {
+            cout << "failed to create texture. ERROR: " << SDL_GetError();
+        }
+        else {
+            mTexture = newTexture;
+            mWidth = newSurface->w;
+            mHeight = newSurface->h;
+        }
+        SDL_FreeSurface(newSurface);
+    }
+    return mTexture != NULL;
+
 }
 
 void LTexture :: render (int x, int y, SDL_Rect *clip, double angle, SDL_Point *center, SDL_RendererFlip flip){
@@ -240,6 +249,12 @@ bool init()
                     cout << "failed to initialize img. SDL ERROR: " << SDL_GetError() << endl;
                     success = false;
                 }
+
+                //initialize sdl ttf
+                if (TTF_Init() < 0){
+                    cout << "failed to initialize SDL ttf. ERROR: " << TTF_GetError();
+                    success = false;
+                }
             }
         }
     }
@@ -248,17 +263,27 @@ bool init()
 
 bool loadMedia(){
     bool success = true;
-    if (!gArrowTexture.loadFromFile("C:/learnSDL2/SDL2_test/arrow.png"))
-    {
-        cout << "failed to load img\n";
+    //open the font
+    gFont = TTF_OpenFont("C:/learnSDL2/SDL2_test/lazy.ttf", 28);
+    if (gFont == NULL){
+        cout << "failed to open font. ERROR: " << TTF_GetError() << endl;
         success = false;
+    }
+    else{
+        //load text texture
+        //text color is black
+        SDL_Color textColor = {0, 0, 0};
+        if (!gTextTexture.loadFromRenderedText("the quick brown fox jump over the lazy dog", textColor)){
+            cout << "failed to load text texture\n" ;
+            success = false;
+        }
     }
     return success;
 }
 
 void close_program()
 {
-    gArrowTexture.free();
+    gTextTexture.free();
 
     SDL_DestroyRenderer(gRenderer);
     gRenderer = NULL;
@@ -268,4 +293,5 @@ void close_program()
 
     SDL_Quit();
     IMG_Quit();
+    TTF_Quit();
 }
