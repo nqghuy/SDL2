@@ -96,11 +96,29 @@ int main(int argc, char *argv[]){
                 SDL_SetRenderDrawColor(gRenderer, 0xFF, 0xFF, 255, 0xFF);
                 SDL_RenderClear(gRenderer);
 
-                gTextTexture.render((SCREEN_WIDTH - gTextTexture.getWidth()) / 2, (SCREEN_HEIGHT - gTextTexture.getHeight()) / 2);
+                //the red quad
+                SDL_Rect fillrect = {SCREEN_WIDTH / 4, SCREEN_HEIGHT / 4, SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2};
+                SDL_SetRenderDrawColor(gRenderer, 255, 0, 0, 0);
+                SDL_RenderFillRect(gRenderer, &fillrect);
+
+                //the blue outline quad
+                SDL_Rect outlineRect = {SCREEN_WIDTH / 6, SCREEN_HEIGHT / 6, SCREEN_WIDTH * 2 / 3, SCREEN_HEIGHT * 2 / 3};
+                SDL_SetRenderDrawColor(gRenderer, 0, 255, 0, 1);
+                SDL_RenderDrawRect(gRenderer, &outlineRect);
+
+                //the horizontal line
+                SDL_SetRenderDrawColor(gRenderer, 0, 0, 255, 1);
+                SDL_RenderDrawLine(gRenderer, 0, SCREEN_HEIGHT / 2, SCREEN_WIDTH, SCREEN_HEIGHT / 2);
+
+                //VERTICAL DOTS
+                SDL_SetRenderDrawColor(gRenderer, 0, 0, 0, 1);
+                for (int i = 0; i <= SCREEN_HEIGHT; i += 4){
+                    SDL_RenderDrawPoint(gRenderer, SCREEN_WIDTH / 2, i);
+                }
+
 
                 //update screen
                 SDL_RenderPresent(gRenderer);
-
             }
         }
     }
@@ -264,20 +282,20 @@ bool init()
 bool loadMedia(){
     bool success = true;
     //open the font
-    gFont = TTF_OpenFont("C:/learnSDL2/SDL2_test/lazy.ttf", 28);
-    if (gFont == NULL){
-        cout << "failed to open font. ERROR: " << TTF_GetError() << endl;
-        success = false;
-    }
-    else{
-        //load text texture
-        //text color is black
-        SDL_Color textColor = {0, 0, 0};
-        if (!gTextTexture.loadFromRenderedText("the quick brown fox jump over the lazy dog", textColor)){
-            cout << "failed to load text texture\n" ;
-            success = false;
-        }
-    }
+//    gFont = TTF_OpenFont("C:/learnSDL2/SDL2_test/lazy.ttf", 28);
+//    if (gFont == NULL){
+//        cout << "failed to open font. ERROR: " << TTF_GetError() << endl;
+//        success = false;
+//    }
+//    else{
+//        //load text texture
+//        //text color is black
+//        SDL_Color textColor = {0, 0, 0};
+//        if (!gTextTexture.loadFromRenderedText("the quick brown fox jump over the lazy dog", textColor)){
+//            cout << "failed to load text texture\n" ;
+//            success = false;
+//        }
+//    }
     return success;
 }
 
