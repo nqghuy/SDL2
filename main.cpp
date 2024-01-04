@@ -1,14 +1,33 @@
 #include <bits/stdc++.h>
 #include <SDL.h>
 #include <SDL_image.h>
-#include <SDL_ttf.h>
+//#include <SDL_ttf.h>
 
 using namespace std;
+
+//screen dimension constant
+const int SCREEN_WIDTH = 640;
+const int SCREEN_HEIGHT = 480;
+
+//button dimension const
+const int BUTTON_WIDTH = 300;
+const int BUTTON_HEIGHT = 200;
+const int TOTAL_BUTTONS = 4;
+
+enum LButtonSprite{
+    BUTTON_SPRITE_MOUSE_OUT ,
+    BUTTON_SPRITE_MOUSE_OVER_MOTION,
+    BUTTON_SPRITE_MOUSE_DOWN = 2,
+    BUTTON_SPRITE_MOUSE_UP = 3,
+    BUTTON_SPRITE_TOTAL = 4
+};
 
 class LTexture{
 private:
     //the actual hardware texture
     SDL_Texture *mTexture;
+
+    //image dimensions
     int mWidth;
     int mHeight;
 public:
@@ -18,11 +37,13 @@ public:
     //deallocate memory
     ~LTexture(){};
 
-    //load img from file
+    //load image from file
     bool loadFromFile(string);
 
+    #if defined(SDL_TTF_MAJOR_VERSION)
     //create image from font string
     bool loadFromRenderedText(string, SDL_Color);
+    #endif
 
     //render texture at given point
     void render(int, int, SDL_Rect* = NULL, double angle = 0, SDL_Point* center = NULL, SDL_RendererFlip = SDL_FLIP_NONE);
@@ -36,6 +57,7 @@ public:
     //set the amount of alpha
     void setAlphaMode(Uint8 alpha);
 
+    //increase or decrease color (r,g,b);
     void setColor(Uint8 red, Uint8 green, Uint8 blue);
 
     //gets image dimensions
@@ -43,9 +65,24 @@ public:
     int getHeight();
 };
 
-//screen dimension constant
-const int SCREEN_WIDTH = 640;
-const int SCREEN_HEIGHT = 480;
+class LButton{
+private:
+    SDL_Point mPosition;
+    LButtonSprite mCurrenSprite;
+public:
+    //initialize internal variables
+    LButton();
+
+    //set top left position
+    void setPosition(int x, int y);
+
+    //handle mouse event
+    void handle_mouse_event(SDL_Event &e);
+
+    //shows button sprite
+    void render();
+};
+
 
 //the window we'll be rendering to
 SDL_Window* gWindow = NULL;
@@ -53,9 +90,14 @@ SDL_Window* gWindow = NULL;
 //the window renderer
 SDL_Renderer* gRenderer = NULL;
 
-TTF_Font *gFont = NULL;
+//4 source rectangle
+SDL_Rect gSpriteClip[BUTTON_SPRITE_TOTAL];
 
-LTexture gTextTexture;
+//4 button for 4 corner
+LButton gButton[TOTAL_BUTTONS];
+
+//texture load img from file
+LTexture gSpriteSheetTexture;
 
 //starts up SDL and creates window
 bool init();
@@ -91,32 +133,19 @@ int main(int argc, char *argv[]){
                     {
                         quit = true;
                     }
+                    else{
+                        for (int i = 0; i < TOTAL_BUTTONS; i++){
+                            gButton[i].handle_mouse_event(e);
+                        }
+                    }
                 }
                 // clear screen
-                SDL_SetRenderDrawColor(gRenderer, 0xFF, 0xFF, 255, 0xFF);
+                SDL_SetRenderDrawColor(gRenderer, 255, 255, 255, 1);
                 SDL_RenderClear(gRenderer);
 
-                //the red quad
-                SDL_Rect fillrect = {SCREEN_WIDTH / 4, SCREEN_HEIGHT / 4, SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2};
-                SDL_SetRenderDrawColor(gRenderer, 255, 0, 0, 0);
-                SDL_RenderFillRect(gRenderer, &fillrect);
-
-                //the blue outline quad
-                SDL_Rect outlineRect = {SCREEN_WIDTH / 6, SCREEN_HEIGHT / 6, SCREEN_WIDTH * 2 / 3, SCREEN_HEIGHT * 2 / 3};
-                SDL_SetRenderDrawColor(gRenderer, 0, 255, 0, 1);
-                SDL_RenderDrawRect(gRenderer, &outlineRect);
-
-                //the horizontal line
-                SDL_SetRenderDrawColor(gRenderer, 0, 0, 255, 1);
-                SDL_RenderDrawLine(gRenderer, 0, SCREEN_HEIGHT / 2, SCREEN_WIDTH, SCREEN_HEIGHT / 2);
-
-                //VERTICAL DOTS
-                SDL_SetRenderDrawColor(gRenderer, 0, 0, 0, 1);
-                for (int i = 0; i <= SCREEN_HEIGHT; i += 4){
-                    SDL_RenderDrawPoint(gRenderer, SCREEN_WIDTH / 2, i);
+                for (int i = 0; i < TOTAL_BUTTONS; i++){
+                    gButton[i].render();
                 }
-
-
                 //update screen
                 SDL_RenderPresent(gRenderer);
             }
@@ -133,6 +162,8 @@ LTexture :: LTexture(){
 }
 
 bool LTexture :: loadFromFile(string file){
+    free();
+
     //the final texture
     SDL_Texture *newTexture = NULL;
 
@@ -143,6 +174,8 @@ bool LTexture :: loadFromFile(string file){
     else{
         //set color key image (background)
         SDL_SetColorKey(LoadedSurface, SDL_TRUE, SDL_MapRGB(LoadedSurface->format, 0, 0xFF, 0xFF));
+
+        //create texture from surface
         newTexture = SDL_CreateTextureFromSurface(gRenderer, LoadedSurface);
         if (newTexture == NULL){
             cout << "failed to load new texture. SDL ERROR: " << SDL_GetError() << endl;
@@ -161,6 +194,7 @@ bool LTexture :: loadFromFile(string file){
     return mTexture != NULL;
 }
 
+#if defined (SDL_TTF_MAJOR_VERSION)
 bool LTexture :: loadFromRenderedText(string textTexture, SDL_Color color){
     free();
     // final texture
@@ -188,7 +222,9 @@ bool LTexture :: loadFromRenderedText(string textTexture, SDL_Color color){
     return mTexture != NULL;
 
 }
+#endif
 
+//LTexture
 void LTexture :: render (int x, int y, SDL_Rect *clip, double angle, SDL_Point *center, SDL_RendererFlip flip){
     SDL_Rect rectQuad = {x, y, mWidth, mHeight}; //destination space
     if (clip != NULL){
@@ -231,6 +267,49 @@ int LTexture :: getHeight()
     return this->mHeight;
 }
 
+//LButton
+LButton :: LButton(){
+    mPosition.x = 0;
+    mPosition.y = 0;
+    mCurrenSprite = BUTTON_SPRITE_MOUSE_OUT;
+}
+
+void LButton :: setPosition(int x, int y){
+    mPosition.x = x;
+    mPosition.y = y;
+}
+
+void LButton :: handle_mouse_event (SDL_Event &e)
+{
+    if (e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP || e.type == SDL_MOUSEMOTION){
+        //the coordinate of mouse
+        int x, y;
+        SDL_GetMouseState(&x, &y);
+
+        //check inside
+        bool inside = true;
+        if (x < mPosition.x || y < mPosition.y || x > mPosition.x + BUTTON_WIDTH || y > mPosition.y + BUTTON_HEIGHT){
+            inside = false;
+        }
+        if (!inside){
+            mCurrenSprite = BUTTON_SPRITE_MOUSE_OUT;
+        }
+        else{
+            mCurrenSprite = BUTTON_SPRITE_MOUSE_OVER_MOTION;
+            if  (e.type == SDL_MOUSEBUTTONDOWN){
+                mCurrenSprite = BUTTON_SPRITE_MOUSE_DOWN;
+            }
+            else if (e.type == SDL_MOUSEBUTTONUP){
+                mCurrenSprite = BUTTON_SPRITE_MOUSE_UP;
+            }
+        }
+    }
+}
+
+void LButton :: render(){
+    gSpriteSheetTexture.render(mPosition.x, mPosition.y, &gSpriteClip[mCurrenSprite]);
+}
+
 bool init()
 {
     bool success = true;
@@ -268,11 +347,13 @@ bool init()
                     success = false;
                 }
 
+                #if defined (SDL_TTF_MAJOR_VERSION)
                 //initialize sdl ttf
                 if (TTF_Init() < 0){
                     cout << "failed to initialize SDL ttf. ERROR: " << TTF_GetError();
                     success = false;
                 }
+                #endif
             }
         }
     }
@@ -281,27 +362,34 @@ bool init()
 
 bool loadMedia(){
     bool success = true;
-    //open the font
-//    gFont = TTF_OpenFont("C:/learnSDL2/SDL2_test/lazy.ttf", 28);
-//    if (gFont == NULL){
-//        cout << "failed to open font. ERROR: " << TTF_GetError() << endl;
-//        success = false;
-//    }
-//    else{
-//        //load text texture
-//        //text color is black
-//        SDL_Color textColor = {0, 0, 0};
-//        if (!gTextTexture.loadFromRenderedText("the quick brown fox jump over the lazy dog", textColor)){
-//            cout << "failed to load text texture\n" ;
-//            success = false;
-//        }
-//    }
+    if (!gSpriteSheetTexture.loadFromFile("C:/learnSDL2/SDL2_test/button.png"))
+    {
+        cout << "failed to load img\n";
+        success = false;
+    }
+    else{
+
+        //4 sprite in source img
+        for (int i = 0; i < BUTTON_SPRITE_TOTAL; i++){
+            gSpriteClip[i].x = 0;
+            gSpriteClip[i].y = i * 200;
+            gSpriteClip[i].w = BUTTON_WIDTH;
+            gSpriteClip[i].h = BUTTON_HEIGHT;
+        }
+
+        //set position for 4 corner button
+        gButton[0].setPosition(0, 0);
+        gButton[1].setPosition(SCREEN_WIDTH - BUTTON_WIDTH, 0);
+        gButton[2].setPosition(0, SCREEN_HEIGHT - BUTTON_HEIGHT);
+        gButton[3].setPosition(SCREEN_WIDTH - BUTTON_WIDTH, SCREEN_HEIGHT - BUTTON_HEIGHT);
+    }
+
     return success;
 }
 
 void close_program()
 {
-    gTextTexture.free();
+    gSpriteSheetTexture.free();
 
     SDL_DestroyRenderer(gRenderer);
     gRenderer = NULL;
@@ -311,5 +399,5 @@ void close_program()
 
     SDL_Quit();
     IMG_Quit();
-    TTF_Quit();
+//    TTF_Quit();
 }
