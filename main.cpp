@@ -54,6 +54,35 @@ public:
     int getHeight();
 };
 
+class LTimer{
+private:
+    //the clock time when timer starts
+    Uint32 mStartTicks;
+
+    //the ticks stored when timer is paused
+    Uint32 mPauseTicks;
+
+    //clock status
+    bool mStart;
+    bool mPause;
+
+public:
+    //the various clock actions
+    void start();
+    void stop();
+    void pause();
+    void unpause();
+
+    //constructor
+    LTimer();
+
+    //get the timer ticks
+    Uint32 getTicks();
+
+    //check the status of timer
+    bool isPaused();
+    bool isStarted();
+};
 
 //the window we'll be rendering to
 SDL_Window* gWindow = NULL;
@@ -64,8 +93,11 @@ SDL_Renderer* gRenderer = NULL;
 //font used in this program
 TTF_Font *gFont = NULL;
 
-//prompt texture
-LTexture gPromptTexture;
+//start prompt texture
+LTexture gStartPromptTexture;
+
+//pause prompt texture
+LTexture gPausePromptTexture;
 
 //display time
 LTexture gTimeTextTexture;
@@ -103,8 +135,7 @@ int main(int argc, char *argv[])
             SDL_Event e;
             bool quit = false;
 
-            //current time start time
-            Uint32 startTime = 0;
+            LTimer Timer;
 
             //to display time text
             stringstream timeText;
@@ -120,26 +151,35 @@ int main(int argc, char *argv[])
                     {
                         quit = true;
                     }//reset start time if press enter
-                    else if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_RETURN){
-                        startTime = SDL_GetTicks();
+                    else if (e.type = SDL_KEYDOWN)
+                    {
+                        switch (e.key.keysym.sym)
+                        {
+                        case SDLK_s:
+                            if (Timer.isStarted())  Timer.stop();
+                            else Timer.start();
+                            break;
+                        case SDLK_p:
+                            if (Timer.isPaused())   Timer.unpause();
+                            else Timer.pause();
+                            break;
+                        }
                     }
                 }
                 //clear screen
                 SDL_SetRenderDrawColor(gRenderer, 255, 255, 255, 255);
                 SDL_RenderClear(gRenderer);
 
-                //set text to be rendered
                 timeText.str("");
-                timeText << "Milliseconds since start time: " << SDL_GetTicks() - startTime;
+                timeText << "Seconds since start time: " << fixed << setprecision(3) <<  1.0 * Timer.getTicks() / 1000;
 
-                //render text
-                if(!gTimeTextTexture.loadFromRenderedText(timeText.str(), color)){
-                    cout << "unable to load time texture\n";
-                }
+                SDL_Color textColor = {0, 0, 0, 255};
+                gTimeTextTexture.loadFromRenderedText(timeText.str(), textColor);
 
                 //render texture
-                gPromptTexture.render((SCREEN_WIDTH - gPromptTexture.getWidth()) / 2, 0);
-                gTimeTextTexture.render((SCREEN_WIDTH - gTimeTextTexture.getWidth()) / 2, (SCREEN_HEIGHT - gPromptTexture.getHeight()) / 2);
+                gStartPromptTexture.render((SCREEN_WIDTH - gStartPromptTexture.getWidth()) / 2, 0);
+                gPausePromptTexture.render((SCREEN_WIDTH - gPausePromptTexture.getWidth()) / 2, gStartPromptTexture.getHeight());
+                gTimeTextTexture.render((SCREEN_WIDTH - gTimeTextTexture.getWidth()) / 2, (SCREEN_HEIGHT - (gStartPromptTexture.getHeight() + gPausePromptTexture.getHeight())) / 2) ;
 
                 //update screen
                 SDL_RenderPresent(gRenderer);
@@ -278,6 +318,93 @@ int LTexture :: getHeight()
     return this->mHeight;
 }
 
+LTimer :: LTimer(){
+    mStartTicks = 0;
+    mPauseTicks = 0;
+    mStart = false;
+    mPause = false;
+}
+
+Uint32 LTimer :: getTicks()
+{
+    //the actual timer time
+    Uint32 time = 0;
+
+    //if timer is not started or stopped
+    if (!isStarted())
+    {
+        time = 0;
+    }
+    else if (isPaused())
+    {
+        time = mPauseTicks;
+    }
+    else time = SDL_GetTicks() - mStartTicks;
+    return time;
+}
+
+bool LTimer :: isStarted()
+{
+    return mStart;
+}
+
+bool LTimer :: isPaused()
+{
+    return mPause;
+}
+
+void LTimer :: start(){
+    //start the timer
+    mStart = true;
+
+    //unpause the timer
+    mPause = false;
+
+    //get the current clock time
+    mStartTicks = SDL_GetTicks();
+    mPauseTicks = 0;
+}
+
+void LTimer :: stop()
+{
+    //stop the timer
+    mStart = false;
+
+    //unpause the timer
+    mPause = false;
+
+    //clear tick variables
+    mStartTicks = 0;
+    mPauseTicks = 0;
+}
+
+void LTimer :: pause()
+{
+    //if the timer is running and unpaused
+    if (isStarted() && !isPaused())
+    {
+        mPause = true;
+
+        //stores ticks
+        mPauseTicks = SDL_GetTicks() - mStartTicks;
+
+        //reset the timer
+        mStartTicks = 0;
+    }
+}
+
+void LTimer :: unpause()
+{
+    if (isStarted() && isPaused())
+    {
+        mPause = false;
+
+        mStartTicks = SDL_GetTicks() - mPauseTicks;
+
+        mPauseTicks = 0;
+    }
+}
+
 bool init()
 {
     bool success = true;
@@ -349,10 +476,15 @@ bool loadMedia()
     else{
         //create prompt texture
         SDL_Color color = {0, 0, 0, 255};
-        if (!gPromptTexture.loadFromRenderedText("Press enter to reset start time", color)){
-            cout << "failed to create prompt texture\n";
+        if (!gStartPromptTexture.loadFromRenderedText("Press S to Start Stop the Timer", color)){
+            cout << "failed to create start prompt texture\n";
             success = false;
         }
+        if (!gPausePromptTexture.loadFromRenderedText("Press P to Pause or Unpause the Timer", color))
+        {
+            cout << "failed to create pause prompt texture\n";
+        }
+
     }
     return success;
 }
@@ -360,7 +492,8 @@ bool loadMedia()
 void close_program()
 {
     //free texture
-    gPromptTexture.free();
+    gStartPromptTexture.free();
+    gPausePromptTexture.free();
     gTimeTextTexture.free();
 
     gFont = NULL;
