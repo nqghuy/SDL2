@@ -9,6 +9,8 @@ using namespace std;
 //screen dimension const
 const int SCREEN_WIDTH = 640;
 const int SCREEN_HEIGHT = 480;
+const int SCREEN_FPS = 60;
+const int SCREEN_TICKS_PER_FRAME = 1000 / 60; // 16
 
 class LTexture
 {
@@ -96,6 +98,7 @@ TTF_Font *gFont = NULL;
 //fps texture
 LTexture gFpsTextTexture;
 
+
 bool init();
 
 //loads media
@@ -130,6 +133,9 @@ int main(int argc, char *argv[])
             //the frames per second timer
             LTimer FpsTimer;
 
+            //the frames per second cap timer
+            LTimer capTimer;
+
             //to display time text
             stringstream timeText;
 
@@ -142,6 +148,9 @@ int main(int argc, char *argv[])
 
             while (!quit)
             {
+                //calculate time to render
+                capTimer.start();
+
                 while (SDL_PollEvent(&e)) // handle events on queue
                 {   //user request quit
                     if (e.type == SDL_QUIT)
@@ -159,7 +168,7 @@ int main(int argc, char *argv[])
 
                 //set text to be rendered
                 timeText.str("");
-                timeText << "Average frames per second: " << avgFps;
+                timeText << "Average frames per second (with cap): " << fixed << setprecision(4) << avgFps;
 
                 if(!gFpsTextTexture.loadFromRenderedText(timeText.str(), textColor)){
                     cout << "failed to load fps text. ERROR: " << SDL_GetError();
@@ -171,6 +180,14 @@ int main(int argc, char *argv[])
                 //update screen
                 SDL_RenderPresent(gRenderer);
                 countedFrames++;
+
+                //if fps is too high because rendering frames is too fast
+                if (capTimer.getTicks() < SCREEN_TICKS_PER_FRAME)
+                {
+                    int delayTime = SCREEN_TICKS_PER_FRAME - capTimer.getTicks();
+                    SDL_Delay(delayTime);
+                }
+
             }
         }
     }
@@ -414,7 +431,7 @@ bool init()
         else
         {
             //create renderer
-            gRenderer = SDL_CreateRenderer(gWindow, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);//synchronize with screen
+            gRenderer = SDL_CreateRenderer(gWindow, -1, SDL_RENDERER_ACCELERATED);//synchronize with screen
             //allow the rendering update with the same time the moniter update
             // allow screen not tear
             if (gRenderer == NULL)
