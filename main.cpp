@@ -9,8 +9,6 @@ using namespace std;
 //screen dimension const
 const int SCREEN_WIDTH = 640;
 const int SCREEN_HEIGHT = 480;
-const int SCREEN_FPS = 60;
-const int SCREEN_TICKS_PER_FRAME = 1000 / 60; // 16
 
 class LTexture
 {
@@ -86,6 +84,37 @@ public:
     bool isStarted();
 };
 
+class Dot{
+private:
+    //the dimension of dot
+    static const int DOT_WIDTH = 20;
+    static const int DOT_HEIGHT = 20;
+
+    //position
+    int mPosX;
+    int mPosY;
+
+    //velocity
+    int mVelX;
+    int mVelY;
+
+    //10 pixels per frame
+    static const int DOT_VEL = 10;
+public:
+    //constructor
+    Dot();
+
+    //adjust velocity through handle event
+    void handle_event(SDL_Event &e);
+
+    //update position
+    void dot_move();
+
+    //show the dot on the screen
+    void render();
+};
+
+
 //the window we'll be rendering to
 SDL_Window* gWindow = NULL;
 
@@ -96,8 +125,7 @@ SDL_Renderer* gRenderer = NULL;
 TTF_Font *gFont = NULL;
 
 //fps texture
-LTexture gFpsTextTexture;
-
+LTexture gDotTexture;
 
 bool init();
 
@@ -130,26 +158,10 @@ int main(int argc, char *argv[])
             SDL_Event e;
             bool quit = false;
 
-            //the frames per second timer
-            LTimer FpsTimer;
-
-            //the frames per second cap timer
-            LTimer capTimer;
-
-            //to display time text
-            stringstream timeText;
-
-            //set text color as black
-            SDL_Color textColor = {0, 0, 0, 255};
-
-            //start counting frames per second
-            int countedFrames = 0;
-            FpsTimer.start();
+            Dot dot;
 
             while (!quit)
             {
-                //calculate time to render
-                capTimer.start();
 
                 while (SDL_PollEvent(&e)) // handle events on queue
                 {   //user request quit
@@ -157,36 +169,20 @@ int main(int argc, char *argv[])
                     {
                         quit = true;
                     }
+                    dot.handle_event(e);
                 }
+                dot.dot_move();
 
                 //clear screen
                 SDL_SetRenderDrawColor(gRenderer, 255, 255, 255, 255);
                 SDL_RenderClear(gRenderer);
 
-                float avgFps = countedFrames / (FpsTimer.getTicks() / 1000.f);
-                if (avgFps > 200000)    avgFps = 0;
-
-                //set text to be rendered
-                timeText.str("");
-                timeText << "Average frames per second (with cap): " << fixed << setprecision(4) << avgFps;
-
-                if(!gFpsTextTexture.loadFromRenderedText(timeText.str(), textColor)){
-                    cout << "failed to load fps text. ERROR: " << SDL_GetError();
-                }
 
                 //render texture
-                gFpsTextTexture.render((SCREEN_WIDTH - gFpsTextTexture.getWidth()) / 2, (SCREEN_HEIGHT - gFpsTextTexture.getHeight()) / 2);
+                dot.render();
 
                 //update screen
                 SDL_RenderPresent(gRenderer);
-                countedFrames++;
-
-                //if fps is too high because rendering frames is too fast
-                if (capTimer.getTicks() < SCREEN_TICKS_PER_FRAME)
-                {
-                    int delayTime = SCREEN_TICKS_PER_FRAME - capTimer.getTicks();
-                    SDL_Delay(delayTime);
-                }
 
             }
         }
@@ -410,6 +406,54 @@ void LTimer :: unpause()
     }
 }
 
+Dot :: Dot()
+{
+    //initialize variables
+    mPosX = 0;
+    mPosY = 0;
+    mVelX = 0;
+    mVelY = 0;
+}
+
+void Dot :: handle_event(SDL_Event &e){
+    //ignore repeated key down
+    //if key is pressed
+    if (e.type == SDL_KEYDOWN && e.key.repeat == 0){
+        switch (e.key.keysym.sym){
+            case SDLK_UP: mVelY -= DOT_VEL; break;
+            case SDLK_DOWN: mVelY += DOT_VEL; break;
+            case SDLK_RIGHT: mVelX += DOT_VEL; break;
+            case SDLK_LEFT: mVelX -= DOT_VEL; break;
+        }
+    }
+    //if key is released
+    else if (e.type == SDL_KEYUP && e.key.repeat == 0){
+        switch (e.key.keysym.sym){
+            case SDLK_UP: mVelY += DOT_VEL; break;
+            case SDLK_DOWN: mVelY -= DOT_VEL; break;
+            case SDLK_RIGHT: mVelX -= DOT_VEL; break;
+            case SDLK_LEFT: mVelX += DOT_VEL; break;
+        }
+    }
+}
+
+//update position
+void Dot :: dot_move(){
+    mPosX += mVelX;
+    mPosY += mVelY;
+    if (mPosX < 0 || mPosX + DOT_WIDTH > SCREEN_WIDTH){
+        mPosX -= mVelX;
+    }
+    if (mPosY < 0 || mPosY + DOT_HEIGHT > SCREEN_HEIGHT){
+        mPosY -= mVelY;
+    }
+}
+
+void Dot :: render()
+{
+    gDotTexture.render(mPosX, mPosY);
+}
+
 bool init()
 {
     bool success = true;
@@ -431,7 +475,7 @@ bool init()
         else
         {
             //create renderer
-            gRenderer = SDL_CreateRenderer(gWindow, -1, SDL_RENDERER_ACCELERATED);//synchronize with screen
+            gRenderer = SDL_CreateRenderer(gWindow, -1, SDL_RENDERER_ACCELERATED |  SDL_RENDERER_PRESENTVSYNC);//synchronize with screen
             //allow the rendering update with the same time the moniter update
             // allow screen not tear
             if (gRenderer == NULL)
@@ -472,10 +516,9 @@ bool init()
 bool loadMedia()
 {
     bool success = true;
-    //open font
-    gFont = TTF_OpenFont("C:/learnSDL2/media and etc/lazy.ttf", 28);
-    if (gFont == NULL){
-        cout << "failed to open lazy font. ERROR: " << TTF_GetError();
+    //upload dot media
+    if (!gDotTexture.loadFromFile("C:/learnSDL2/SDL2_test/media and etc/dot.bmp")){
+        cout << "failed to load dot media\n";
         success = false;
     }
     return success;
@@ -484,8 +527,8 @@ bool loadMedia()
 void close_program()
 {
     //free texture
-    gFpsTextTexture.free();
-    gFont = NULL;
+
+    gDotTexture.free();
 
     //destroy render
     SDL_DestroyRenderer(gRenderer);
