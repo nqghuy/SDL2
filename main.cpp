@@ -98,6 +98,8 @@ private:
     int mVelX;
     int mVelY;
 
+    SDL_Rect mCollider;
+
     //10 pixels per frame
     static const int DOT_VEL = 10;
 public:
@@ -108,7 +110,7 @@ public:
     void handle_event(SDL_Event &e);
 
     //update position
-    void dot_move();
+    void dot_move(SDL_Rect wall);
 
     //show the dot on the screen
     void render();
@@ -131,6 +133,9 @@ bool init();
 
 //loads media
 bool loadMedia();
+
+//box collision detector
+bool checkCollision(SDL_Rect a, SDL_Rect b);
 
 //free media and shuts down sdl
 void close_program();
@@ -160,6 +165,8 @@ int main(int argc, char *argv[])
 
             Dot dot;
 
+            SDL_Rect wall = {300, 40, 40, 400};
+
             while (!quit)
             {
 
@@ -171,12 +178,15 @@ int main(int argc, char *argv[])
                     }
                     dot.handle_event(e);
                 }
-                dot.dot_move();
+                dot.dot_move(wall);
 
                 //clear screen
                 SDL_SetRenderDrawColor(gRenderer, 255, 255, 255, 255);
                 SDL_RenderClear(gRenderer);
 
+                //draw the wall
+                SDL_SetRenderDrawColor(gRenderer, 0, 0, 0, 255);
+                SDL_RenderDrawRect(gRenderer, &wall);
 
                 //render texture
                 dot.render();
@@ -413,6 +423,12 @@ Dot :: Dot()
     mPosY = 0;
     mVelX = 0;
     mVelY = 0;
+
+    //set collider dimensions
+    mCollider.x = 0;
+    mCollider.y = 0;
+    mCollider.w = DOT_WIDTH;
+    mCollider.h = DOT_HEIGHT;
 }
 
 void Dot :: handle_event(SDL_Event &e){
@@ -438,17 +454,23 @@ void Dot :: handle_event(SDL_Event &e){
 }
 
 //update position
-void Dot :: dot_move(){
+void Dot :: dot_move(SDL_Rect wall){
+    //move the dot left or right
     mPosX += mVelX;
-    mPosY += mVelY;
-    if (mPosX < 0 || mPosX + DOT_WIDTH > SCREEN_WIDTH){
+    mCollider.x = mPosX;
+    if (mPosX < 0 || mPosX + DOT_WIDTH > SCREEN_WIDTH || checkCollision(mCollider, wall)){
         mPosX -= mVelX;
+        mCollider.x = mPosX;
     }
-    if (mPosY < 0 || mPosY + DOT_HEIGHT > SCREEN_HEIGHT){
+
+    //move the dot up or down
+    mPosY += mVelY;
+    mCollider.y = mPosY;
+    if (mPosY < 0 || mPosY + DOT_HEIGHT > SCREEN_HEIGHT || checkCollision(mCollider, wall)){
         mPosY -= mVelY;
+        mCollider.y = mPosY;
     }
 }
-
 void Dot :: render()
 {
     gDotTexture.render(mPosX, mPosY);
@@ -516,12 +538,42 @@ bool init()
 bool loadMedia()
 {
     bool success = true;
+
     //upload dot media
     if (!gDotTexture.loadFromFile("C:/learnSDL2/SDL2_test/media and etc/dot.bmp")){
         cout << "failed to load dot media\n";
         success = false;
     }
     return success;
+}
+
+bool checkCollision(SDL_Rect a, SDL_Rect b){
+    //box dimensions
+    int leftA, leftB;
+    int rightA, rightB;
+    int topA, topB;
+    int bottomA, bottomB;
+
+    //set the first box dimensions
+    leftA = a.x;
+    rightA = a.x + a.w;
+    topA = a.y;
+    bottomA = a.y + a.h;
+
+    //set the second box dimensions
+    leftB = b.x;
+    rightB = b.x + b.w;
+    topB = b.y;
+    bottomB = b.y + b.h;
+
+    //check if two boxes is not colliding
+    if (rightA <= leftB)    return false;
+    if (leftA >= rightB)    return false;
+    if (bottomA <= topB)    return false;
+    if (topA >= bottomB)    return false;
+
+    //others case is colliding
+    return true;
 }
 
 void close_program()
