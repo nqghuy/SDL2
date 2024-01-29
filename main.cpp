@@ -10,6 +10,15 @@ using namespace std;
 const int SCREEN_WIDTH = 640;
 const int SCREEN_HEIGHT = 480;
 
+struct Circle
+{
+    //position of center of the circle
+    int x, y;
+
+    //the radius
+    int r;
+};
+
 class LTexture
 {
 private:
@@ -94,8 +103,8 @@ private:
     int mVelX;
     int mVelY;
 
-    //dot's collision boxes
-    vector<SDL_Rect> mCollider;
+    //dot's collision cicrle
+    Circle mCollider;
 
     //move the collision boxes relative to dot's offset
     void shift_colliders();
@@ -116,13 +125,13 @@ public:
     void handle_event(SDL_Event &e);
 
     //moves the dot and checks collision
-    void dot_move(vector <SDL_Rect> otherColliders);
+    void dot_move(SDL_Rect rect, Circle circle);
 
     //show the dot on the screen
     void render();
 
-    //get collision boxes
-    vector <SDL_Rect> getColliders();
+    //get circle collider
+    Circle getColliders();
 };
 
 
@@ -143,8 +152,14 @@ bool init();
 //loads media
 bool loadMedia();
 
-//box set collision detector
-bool checkCollision(vector <SDL_Rect> &a, vector <SDL_Rect> &b);
+//circle/circle collision detector
+bool checkCollision(Circle &a, Circle &b);
+
+//circle/square collision detector
+bool checkCollision(Circle &a, SDL_Rect &b);
+
+//distance squared between two points   
+double distanceSquared(int x1, int y1, int x2, int y2);
 
 //free media and shuts down sdl
 void close_program();
@@ -173,10 +188,12 @@ int main(int argc, char *argv[])
             bool quit = false;
 
             //the dot move around the window
-            Dot dot(0, 0);
+            Dot dot(Dot :: DOT_WIDTH / 2, Dot :: DOT_HEIGHT / 2);
 
             //the fixed dot
             Dot another_dot (SCREEN_WIDTH / 4, SCREEN_HEIGHT / 4);
+
+            SDL_Rect wall = {300, 40, 40, 400};
 
             while (!quit)
             {
@@ -189,11 +206,14 @@ int main(int argc, char *argv[])
                     }
                     dot.handle_event(e);
                 }
-                dot.dot_move(another_dot.getColliders());
+                dot.dot_move(wall, another_dot.getColliders());
 
                 //clear screen
                 SDL_SetRenderDrawColor(gRenderer, 255, 255, 255, 255);
                 SDL_RenderClear(gRenderer);
+
+                SDL_SetRenderDrawColor(gRenderer, 0, 0, 0, 255);
+                SDL_RenderDrawRect(gRenderer, &wall);
 
                 //render texture
                 dot.render();
@@ -231,7 +251,7 @@ bool LTexture :: loadFromFile(string file)
     else
     {
         //set color key image (background)
-        SDL_SetColorKey(LoadedSurface, SDL_TRUE, SDL_MapRGB(LoadedSurface->format, 0, 0xFF, 0xFF));
+        SDL_SetColorKey(LoadedSurface, SDL_TRUE, SDL_MapRGB(LoadedSurface->format, 255, 255, 255));
 
         //create texture from surface
         newTexture = SDL_CreateTextureFromSurface(gRenderer, LoadedSurface);
@@ -434,42 +454,8 @@ Dot :: Dot(int _x, int _y)
     mVelX = 0;
     mVelY = 0;
 
-    //create the necessary SDL_Rect
-    mCollider.resize(11);
-
-    //initialize the collision boxes's width and height
-    mCollider[0].w = 6;
-    mCollider[0].h = 1;
-
-    mCollider[1].w = 10;
-    mCollider[1].h = 1;
-
-    mCollider[2].w = 14;
-    mCollider[2].h = 1;
-
-    mCollider[3].w = 16;
-    mCollider[3].h = 2;
-
-    mCollider[4].w = 18;
-    mCollider[4].h = 2;
-
-    mCollider[5].w = 20;
-    mCollider[5].h = 6;
-
-    mCollider[6].w = 18;
-    mCollider[6].h = 2;
-
-    mCollider[7].w = 16;
-    mCollider[7].h = 2;
-
-    mCollider[8].w = 14;
-    mCollider[8].h = 1;
-
-    mCollider[9].w = 10;
-    mCollider[9].h = 1;
-
-    mCollider[10].w = 6;
-    mCollider[10].h = 1;
+    //initialize dot's radius
+    mCollider.r = DOT_WIDTH / 2;
 
     //initialize colliders relative to the position
     shift_colliders();
@@ -498,13 +484,13 @@ void Dot :: handle_event(SDL_Event &e){
 }
 
 //update position
-void Dot :: dot_move(vector <SDL_Rect> otherColliders){
+void Dot :: dot_move(SDL_Rect rect, Circle circle){
     //move the dot left or right
     mPosX += mVelX;
     shift_colliders();
 
     //if the dot collided or move too far to the left or right
-    if (mPosX < 0 || mPosX + DOT_WIDTH > SCREEN_WIDTH || checkCollision(mCollider, otherColliders)){
+    if (mPosX - mCollider.r < 0 || mPosX + mCollider.r > SCREEN_WIDTH || checkCollision(mCollider, rect) || checkCollision(mCollider, circle)){
         mPosX -= mVelX;
         shift_colliders();
     }
@@ -514,34 +500,23 @@ void Dot :: dot_move(vector <SDL_Rect> otherColliders){
     shift_colliders();
 
     //if the dot collided or move too far to up or down
-    if (mPosY < 0 || mPosY + DOT_HEIGHT > SCREEN_HEIGHT || checkCollision(mCollider, otherColliders)){
+    if (mPosY - mCollider.r < 0 || mPosY + mCollider.r > SCREEN_HEIGHT || checkCollision(mCollider, rect) || checkCollision(mCollider, circle)){
         mPosY -= mVelY;
         shift_colliders();
     }
 }
 void Dot :: render()
 {
-    gDotTexture.render(mPosX, mPosY);
+    //show the dot
+    gDotTexture.render(mPosX - mCollider.r, mPosY - mCollider.r);
 }
 
 void Dot :: shift_colliders(){
-    //the row offset
-    int r = 0;
-
-    //go through collision boxes
-    for (int i = 0; i < (int)mCollider.size(); i++){
-        //center the collision box
-        mCollider[i].x = mPosX + (DOT_WIDTH - mCollider[i].w) / 2;
-
-        //set the collision box at it row offset
-        mCollider[i].y = mPosY + r;
-
-        //adjust rot offset
-        r += mCollider[i].h;
-    }
+    mCollider.x = mPosX;
+    mCollider.y = mPosY;
 }
 
-vector <SDL_Rect> Dot :: getColliders()
+Circle Dot :: getColliders()
 {
     return mCollider;
 }
@@ -617,35 +592,59 @@ bool loadMedia()
     return success;
 }
 
-bool checkCollision(vector <SDL_Rect> &a, vector<SDL_Rect> &b){
-    //box dimensions
-    int leftA, leftB;
-    int rightA, rightB;
-    int topA, topB;
-    int bottomA, bottomB;
+bool checkCollision(Circle &a, Circle &b){
+    //distance squared from center a to center b
+    double d = distanceSquared(a.x, a.y, b.x, b.y);
 
-    //go through the a box
-    for (int Abox= 0; Abox < (int)a.size(); Abox++){
-        //calculate the side of rect a
-        leftA = a[Abox].x;
-        rightA = a[Abox].x + a[Abox].w;
-        topA = a[Abox].y;
-        bottomA = a[Abox].y + a[Abox].h;
+    //radius sum squared of two circle
+    double totalRadiusSumSquared = (a.r + b.r) * (a.r + b.r);
 
-        //go through the b box
-        for (int Bbox= 0; Bbox < (int)b.size(); Bbox++){
-            //set box b dimensions
-            leftB = b[Bbox].x;
-            rightB = b[Bbox].x + b[Bbox].w;
-            topB = b[Bbox].y;
-            bottomB= b[Bbox].y + b[Bbox].h;
-
-            //check if there is collision
-            if (!(rightA <= leftB || leftA >= rightB || topA >= bottomB || bottomA <= topB))   return true;
-        }
+    //if there is a collision
+    if (d < totalRadiusSumSquared){
+        return true;
     }
-    //if no collision detection
+
+    //if no collision
     return false;
+}
+
+bool checkCollision(Circle &a, SDL_Rect &b){
+    //the closest point on collision box to center of circle
+    int cX, cY;
+
+    //find closet x off
+    if (a.x < b.x){
+        cX = b.x;
+    }
+    else if (a.x > b.x + b.w){
+        cX = b.x + b.w;
+    }
+    else cX = a.x;
+
+    //find cY
+    if (a.y < b.y){
+        cY = b.y;
+    }
+    else if (a.y > b.y + b.h){
+        cY = b.y + b.h;
+    }
+    else cY = a.y;
+
+    //calculate the distance squared between center of circle a and the closet point
+    double d = distanceSquared(a.x, a.y, cX, cY);
+
+    //if collision
+    if (d < a.r * a.r){
+        return true;
+    }
+    return false;
+}
+
+double distanceSquared(int x1, int y1, int x2, int y2)
+{
+    int deltaX = x1 - x2;
+    int deltaY = y1 - y2;
+    return deltaX * deltaX + deltaY * deltaY;
 }
 
 void close_program()
