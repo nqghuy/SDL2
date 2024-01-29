@@ -86,10 +86,6 @@ public:
 
 class Dot{
 private:
-    //the dimension of dot
-    static const int DOT_WIDTH = 20;
-    static const int DOT_HEIGHT = 20;
-
     //position
     int mPosX;
     int mPosY;
@@ -98,22 +94,35 @@ private:
     int mVelX;
     int mVelY;
 
-    SDL_Rect mCollider;
+    //dot's collision boxes
+    vector<SDL_Rect> mCollider;
 
-    //10 pixels per frame
-    static const int DOT_VEL = 10;
+    //move the collision boxes relative to dot's offset
+    void shift_colliders();
+
+
 public:
+    //the dimension of dot
+    static const int DOT_WIDTH = 20;
+    static const int DOT_HEIGHT = 20;
+
+    //maximum axis velocity of the dot
+    static const int DOT_VEL = 2;
+
     //constructor
-    Dot();
+    Dot(int _x, int _y);
 
     //adjust velocity through handle event
     void handle_event(SDL_Event &e);
 
-    //update position
-    void dot_move(SDL_Rect wall);
+    //moves the dot and checks collision
+    void dot_move(vector <SDL_Rect> otherColliders);
 
     //show the dot on the screen
     void render();
+
+    //get collision boxes
+    vector <SDL_Rect> getColliders();
 };
 
 
@@ -134,8 +143,8 @@ bool init();
 //loads media
 bool loadMedia();
 
-//box collision detector
-bool checkCollision(SDL_Rect a, SDL_Rect b);
+//box set collision detector
+bool checkCollision(vector <SDL_Rect> &a, vector <SDL_Rect> &b);
 
 //free media and shuts down sdl
 void close_program();
@@ -163,9 +172,11 @@ int main(int argc, char *argv[])
             SDL_Event e;
             bool quit = false;
 
-            Dot dot;
+            //the dot move around the window
+            Dot dot(0, 0);
 
-            SDL_Rect wall = {300, 40, 40, 400};
+            //the fixed dot
+            Dot another_dot (SCREEN_WIDTH / 4, SCREEN_HEIGHT / 4);
 
             while (!quit)
             {
@@ -178,18 +189,15 @@ int main(int argc, char *argv[])
                     }
                     dot.handle_event(e);
                 }
-                dot.dot_move(wall);
+                dot.dot_move(another_dot.getColliders());
 
                 //clear screen
                 SDL_SetRenderDrawColor(gRenderer, 255, 255, 255, 255);
                 SDL_RenderClear(gRenderer);
 
-                //draw the wall
-                SDL_SetRenderDrawColor(gRenderer, 0, 0, 0, 255);
-                SDL_RenderDrawRect(gRenderer, &wall);
-
                 //render texture
                 dot.render();
+                another_dot.render();
 
                 //update screen
                 SDL_RenderPresent(gRenderer);
@@ -416,19 +424,55 @@ void LTimer :: unpause()
     }
 }
 
-Dot :: Dot()
+Dot :: Dot(int _x, int _y)
 {
-    //initialize variables
-    mPosX = 0;
-    mPosY = 0;
+    //initialize dot's offset
+    mPosX = _x;
+    mPosY = _y;
+
+    //initialize dot's velocity
     mVelX = 0;
     mVelY = 0;
 
-    //set collider dimensions
-    mCollider.x = 0;
-    mCollider.y = 0;
-    mCollider.w = DOT_WIDTH;
-    mCollider.h = DOT_HEIGHT;
+    //create the necessary SDL_Rect
+    mCollider.resize(11);
+
+    //initialize the collision boxes's width and height
+    mCollider[0].w = 6;
+    mCollider[0].h = 1;
+
+    mCollider[1].w = 10;
+    mCollider[1].h = 1;
+
+    mCollider[2].w = 14;
+    mCollider[2].h = 1;
+
+    mCollider[3].w = 16;
+    mCollider[3].h = 2;
+
+    mCollider[4].w = 18;
+    mCollider[4].h = 2;
+
+    mCollider[5].w = 20;
+    mCollider[5].h = 6;
+
+    mCollider[6].w = 18;
+    mCollider[6].h = 2;
+
+    mCollider[7].w = 16;
+    mCollider[7].h = 2;
+
+    mCollider[8].w = 14;
+    mCollider[8].h = 1;
+
+    mCollider[9].w = 10;
+    mCollider[9].h = 1;
+
+    mCollider[10].w = 6;
+    mCollider[10].h = 1;
+
+    //initialize colliders relative to the position
+    shift_colliders();
 }
 
 void Dot :: handle_event(SDL_Event &e){
@@ -454,26 +498,52 @@ void Dot :: handle_event(SDL_Event &e){
 }
 
 //update position
-void Dot :: dot_move(SDL_Rect wall){
+void Dot :: dot_move(vector <SDL_Rect> otherColliders){
     //move the dot left or right
     mPosX += mVelX;
-    mCollider.x = mPosX;
-    if (mPosX < 0 || mPosX + DOT_WIDTH > SCREEN_WIDTH || checkCollision(mCollider, wall)){
+    shift_colliders();
+
+    //if the dot collided or move too far to the left or right
+    if (mPosX < 0 || mPosX + DOT_WIDTH > SCREEN_WIDTH || checkCollision(mCollider, otherColliders)){
         mPosX -= mVelX;
-        mCollider.x = mPosX;
+        shift_colliders();
     }
 
     //move the dot up or down
     mPosY += mVelY;
-    mCollider.y = mPosY;
-    if (mPosY < 0 || mPosY + DOT_HEIGHT > SCREEN_HEIGHT || checkCollision(mCollider, wall)){
+    shift_colliders();
+
+    //if the dot collided or move too far to up or down
+    if (mPosY < 0 || mPosY + DOT_HEIGHT > SCREEN_HEIGHT || checkCollision(mCollider, otherColliders)){
         mPosY -= mVelY;
-        mCollider.y = mPosY;
+        shift_colliders();
     }
 }
 void Dot :: render()
 {
     gDotTexture.render(mPosX, mPosY);
+}
+
+void Dot :: shift_colliders(){
+    //the row offset
+    int r = 0;
+
+    //go through collision boxes
+    for (int i = 0; i < (int)mCollider.size(); i++){
+        //center the collision box
+        mCollider[i].x = mPosX + (DOT_WIDTH - mCollider[i].w) / 2;
+
+        //set the collision box at it row offset
+        mCollider[i].y = mPosY + r;
+
+        //adjust rot offset
+        r += mCollider[i].h;
+    }
+}
+
+vector <SDL_Rect> Dot :: getColliders()
+{
+    return mCollider;
 }
 
 bool init()
@@ -547,39 +617,40 @@ bool loadMedia()
     return success;
 }
 
-bool checkCollision(SDL_Rect a, SDL_Rect b){
+bool checkCollision(vector <SDL_Rect> &a, vector<SDL_Rect> &b){
     //box dimensions
     int leftA, leftB;
     int rightA, rightB;
     int topA, topB;
     int bottomA, bottomB;
 
-    //set the first box dimensions
-    leftA = a.x;
-    rightA = a.x + a.w;
-    topA = a.y;
-    bottomA = a.y + a.h;
+    //go through the a box
+    for (int Abox= 0; Abox < (int)a.size(); Abox++){
+        //calculate the side of rect a
+        leftA = a[Abox].x;
+        rightA = a[Abox].x + a[Abox].w;
+        topA = a[Abox].y;
+        bottomA = a[Abox].y + a[Abox].h;
 
-    //set the second box dimensions
-    leftB = b.x;
-    rightB = b.x + b.w;
-    topB = b.y;
-    bottomB = b.y + b.h;
+        //go through the b box
+        for (int Bbox= 0; Bbox < (int)b.size(); Bbox++){
+            //set box b dimensions
+            leftB = b[Bbox].x;
+            rightB = b[Bbox].x + b[Bbox].w;
+            topB = b[Bbox].y;
+            bottomB= b[Bbox].y + b[Bbox].h;
 
-    //check if two boxes is not colliding
-    if (rightA <= leftB)    return false;
-    if (leftA >= rightB)    return false;
-    if (bottomA <= topB)    return false;
-    if (topA >= bottomB)    return false;
-
-    //others case is colliding
-    return true;
+            //check if there is collision
+            if (!(rightA <= leftB || leftA >= rightB || topA >= bottomB || bottomA <= topB))   return true;
+        }
+    }
+    //if no collision detection
+    return false;
 }
 
 void close_program()
 {
     //free texture
-
     gDotTexture.free();
 
     //destroy render
