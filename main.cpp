@@ -2,7 +2,6 @@
 #include <SDL.h>
 #include <SDL_image.h>
 #include <SDL_mixer.h>
-#include <SDL_ttf.h>
 
 using namespace std;
 
@@ -10,14 +9,8 @@ using namespace std;
 const int SCREEN_WIDTH = 640;
 const int SCREEN_HEIGHT = 480;
 
-struct Circle
-{
-    //position of center of the circle
-    int x, y;
-
-    //the radius
-    int r;
-};
+const int LEVEL_WIDTH = 1280;
+const int LEVEL_HEIGHT = 960;
 
 class LTexture
 {
@@ -63,36 +56,6 @@ public:
     int getHeight();
 };
 
-class LTimer{
-private:
-    //the clock time when timer starts
-    Uint32 mStartTicks;
-
-    //the ticks stored when timer is paused
-    Uint32 mPauseTicks;
-
-    //clock status
-    bool mStart;
-    bool mPause;
-
-public:
-    //the various clock actions
-    void start();
-    void stop();
-    void pause();
-    void unpause();
-
-    //constructor
-    LTimer();
-
-    //get the timer ticks
-    Uint32 getTicks();
-
-    //check the status of timer
-    bool isPaused();
-    bool isStarted();
-};
-
 class Dot{
 private:
     //position
@@ -103,20 +66,13 @@ private:
     int mVelX;
     int mVelY;
 
-    //dot's collision cicrle
-    Circle mCollider;
-
-    //move the collision boxes relative to dot's offset
-    void shift_colliders();
-
-
 public:
     //the dimension of dot
     static const int DOT_WIDTH = 20;
     static const int DOT_HEIGHT = 20;
 
     //maximum axis velocity of the dot
-    static const int DOT_VEL = 2;
+    static const int DOT_VEL = 10;
 
     //constructor
     Dot(int _x, int _y);
@@ -125,13 +81,14 @@ public:
     void handle_event(SDL_Event &e);
 
     //moves the dot and checks collision
-    void dot_move(SDL_Rect rect, Circle circle);
+    void dot_move();
 
-    //show the dot on the screen
-    void render();
+    //show the dot on the screen, the position relative to the camera
+    void render(int camX, int camY);
 
-    //get circle collider
-    Circle getColliders();
+    //get position
+    int getPosX();
+    int getPosY();
 };
 
 
@@ -141,25 +98,15 @@ SDL_Window* gWindow = NULL;
 //the window renderer
 SDL_Renderer* gRenderer = NULL;
 
-//font used in this program
-TTF_Font *gFont = NULL;
-
 //fps texture
 LTexture gDotTexture;
+
+LTexture gBGTexture;
 
 bool init();
 
 //loads media
 bool loadMedia();
-
-//circle/circle collision detector
-bool checkCollision(Circle &a, Circle &b);
-
-//circle/square collision detector
-bool checkCollision(Circle &a, SDL_Rect &b);
-
-//distance squared between two points   
-double distanceSquared(int x1, int y1, int x2, int y2);
 
 //free media and shuts down sdl
 void close_program();
@@ -188,12 +135,10 @@ int main(int argc, char *argv[])
             bool quit = false;
 
             //the dot move around the window
-            Dot dot(Dot :: DOT_WIDTH / 2, Dot :: DOT_HEIGHT / 2);
+            Dot dot(0, 0);
 
-            //the fixed dot
-            Dot another_dot (SCREEN_WIDTH / 4, SCREEN_HEIGHT / 4);
-
-            SDL_Rect wall = {300, 40, 40, 400};
+            //source space
+            SDL_Rect camera = {0, 0, SCREEN_WIDTH, SCREEN_HEIGHT};
 
             while (!quit)
             {
@@ -206,22 +151,32 @@ int main(int argc, char *argv[])
                     }
                     dot.handle_event(e);
                 }
-                dot.dot_move(wall, another_dot.getColliders());
+                //update the position of the dot
+                dot.dot_move();
+
+                //center camera over the dot
+                camera.x = dot.getPosX() + Dot :: DOT_WIDTH / 2 - SCREEN_WIDTH / 2;
+                camera.y = dot.getPosY() + Dot :: DOT_HEIGHT / 2 - SCREEN_HEIGHT / 2;
+
+                //keep the camera in bounds
+                if (camera.x < 0)   camera.x = 0;
+                if (camera.x + camera.w > LEVEL_WIDTH ) camera.x = LEVEL_WIDTH - camera.w;
+                if (camera.y < 0)   camera.y = 0;
+                if (camera.y + camera.h > LEVEL_HEIGHT)    camera.y = LEVEL_HEIGHT - camera.h;
 
                 //clear screen
                 SDL_SetRenderDrawColor(gRenderer, 255, 255, 255, 255);
                 SDL_RenderClear(gRenderer);
 
-                SDL_SetRenderDrawColor(gRenderer, 0, 0, 0, 255);
-                SDL_RenderDrawRect(gRenderer, &wall);
-
                 //render texture
-                dot.render();
-                another_dot.render();
+                //background first
+                gBGTexture.render(0, 0, &camera);
+
+                //dot later
+                dot.render(camera.x, camera.y);
 
                 //update screen
                 SDL_RenderPresent(gRenderer);
-
             }
         }
     }
@@ -273,7 +228,7 @@ bool LTexture :: loadFromFile(string file)
     return mTexture != NULL;
 }
 
-#if defined (SDL_MAJOR_VERSION)
+#if defined (SDL_TTF_MAJOR_VERSION)
 bool LTexture :: loadFromRenderedText(string textTexture, SDL_Color color)
 {
     free();
@@ -357,93 +312,6 @@ int LTexture :: getHeight()
     return this->mHeight;
 }
 
-LTimer :: LTimer(){
-    mStartTicks = 0;
-    mPauseTicks = 0;
-    mStart = false;
-    mPause = false;
-}
-
-Uint32 LTimer :: getTicks()
-{
-    //the actual timer time
-    Uint32 time = 0;
-
-    //if timer is not started or stopped
-    if (!isStarted())
-    {
-        time = 0;
-    }
-    else if (isPaused())
-    {
-        time = mPauseTicks;
-    }
-    else time = SDL_GetTicks() - mStartTicks;
-    return time;
-}
-
-bool LTimer :: isStarted()
-{
-    return mStart;
-}
-
-bool LTimer :: isPaused()
-{
-    return mPause;
-}
-
-void LTimer :: start(){
-    //start the timer
-    mStart = true;
-
-    //unpause the timer
-    mPause = false;
-
-    //get the current clock time
-    mStartTicks = SDL_GetTicks();
-    mPauseTicks = 0;
-}
-
-void LTimer :: stop()
-{
-    //stop the timer
-    mStart = false;
-
-    //unpause the timer
-    mPause = false;
-
-    //clear tick variables
-    mStartTicks = 0;
-    mPauseTicks = 0;
-}
-
-void LTimer :: pause()
-{
-    //if the timer is running and unpaused
-    if (isStarted() && !isPaused())
-    {
-        mPause = true;
-
-        //stores ticks
-        mPauseTicks = SDL_GetTicks() - mStartTicks;
-
-        //reset the timer
-        mStartTicks = 0;
-    }
-}
-
-void LTimer :: unpause()
-{
-    if (isStarted() && isPaused())
-    {
-        mPause = false;
-
-        mStartTicks = SDL_GetTicks() - mPauseTicks;
-
-        mPauseTicks = 0;
-    }
-}
-
 Dot :: Dot(int _x, int _y)
 {
     //initialize dot's offset
@@ -454,11 +322,6 @@ Dot :: Dot(int _x, int _y)
     mVelX = 0;
     mVelY = 0;
 
-    //initialize dot's radius
-    mCollider.r = DOT_WIDTH / 2;
-
-    //initialize colliders relative to the position
-    shift_colliders();
 }
 
 void Dot :: handle_event(SDL_Event &e){
@@ -484,41 +347,37 @@ void Dot :: handle_event(SDL_Event &e){
 }
 
 //update position
-void Dot :: dot_move(SDL_Rect rect, Circle circle){
+void Dot :: dot_move(){
     //move the dot left or right
     mPosX += mVelX;
-    shift_colliders();
 
     //if the dot collided or move too far to the left or right
-    if (mPosX - mCollider.r < 0 || mPosX + mCollider.r > SCREEN_WIDTH || checkCollision(mCollider, rect) || checkCollision(mCollider, circle)){
+    if (mPosX < 0 || mPosX + DOT_WIDTH > LEVEL_WIDTH){
         mPosX -= mVelX;
-        shift_colliders();
     }
 
     //move the dot up or down
     mPosY += mVelY;
-    shift_colliders();
 
-    //if the dot collided or move too far to up or down
-    if (mPosY - mCollider.r < 0 || mPosY + mCollider.r > SCREEN_HEIGHT || checkCollision(mCollider, rect) || checkCollision(mCollider, circle)){
+    //if the dot move too far to up or down
+    if (mPosY < 0 || mPosY + DOT_HEIGHT > LEVEL_HEIGHT ){
         mPosY -= mVelY;
-        shift_colliders();
     }
 }
-void Dot :: render()
+void Dot :: render(int camX, int camY)
 {
-    //show the dot
-    gDotTexture.render(mPosX - mCollider.r, mPosY - mCollider.r);
+    //show the dot relative to the camera
+    gDotTexture.render(mPosX - camX, mPosY - camY);
 }
 
-void Dot :: shift_colliders(){
-    mCollider.x = mPosX;
-    mCollider.y = mPosY;
+int Dot :: getPosX()
+{
+    return mPosX;
 }
 
-Circle Dot :: getColliders()
+int Dot :: getPosY()
 {
-    return mCollider;
+    return mPosY;
 }
 
 bool init()
@@ -566,14 +425,6 @@ bool init()
                     cout << "failed to initialize sdl mixed. ERROR: " << Mix_GetError() << endl;
                     success = false;
                 }
-
-                //initialize sdl ttf
-                if (TTF_Init() < 0)
-                {
-                    cout << "failed to initialize SDL ttf. ERROR: " << TTF_GetError();
-                    success = false;
-                }
-
             }
         }
     }
@@ -589,62 +440,12 @@ bool loadMedia()
         cout << "failed to load dot media\n";
         success = false;
     }
+    if (!gBGTexture.loadFromFile("C:/learnSDL2/SDL2_test/media and etc/bg.png"))
+    {
+        cout << "failed to load bg texture\n";
+        success = false;
+    }
     return success;
-}
-
-bool checkCollision(Circle &a, Circle &b){
-    //distance squared from center a to center b
-    double d = distanceSquared(a.x, a.y, b.x, b.y);
-
-    //radius sum squared of two circle
-    double totalRadiusSumSquared = (a.r + b.r) * (a.r + b.r);
-
-    //if there is a collision
-    if (d < totalRadiusSumSquared){
-        return true;
-    }
-
-    //if no collision
-    return false;
-}
-
-bool checkCollision(Circle &a, SDL_Rect &b){
-    //the closest point on collision box to center of circle
-    int cX, cY;
-
-    //find closet x off
-    if (a.x < b.x){
-        cX = b.x;
-    }
-    else if (a.x > b.x + b.w){
-        cX = b.x + b.w;
-    }
-    else cX = a.x;
-
-    //find cY
-    if (a.y < b.y){
-        cY = b.y;
-    }
-    else if (a.y > b.y + b.h){
-        cY = b.y + b.h;
-    }
-    else cY = a.y;
-
-    //calculate the distance squared between center of circle a and the closet point
-    double d = distanceSquared(a.x, a.y, cX, cY);
-
-    //if collision
-    if (d < a.r * a.r){
-        return true;
-    }
-    return false;
-}
-
-double distanceSquared(int x1, int y1, int x2, int y2)
-{
-    int deltaX = x1 - x2;
-    int deltaY = y1 - y2;
-    return deltaX * deltaX + deltaY * deltaY;
 }
 
 void close_program()
@@ -662,5 +463,5 @@ void close_program()
 
     SDL_Quit();
     IMG_Quit();
-    TTF_Quit();
+//    TTF_Quit();
 }
