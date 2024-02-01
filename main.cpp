@@ -84,7 +84,7 @@ public:
     void dot_move();
 
     //show the dot on the screen, the position relative to the camera
-    void render(int camX, int camY);
+    void render();
 
     //get position
     int getPosX();
@@ -137,8 +137,8 @@ int main(int argc, char *argv[])
             //the dot move around the window
             Dot dot(0, 0);
 
-            //source space
-            SDL_Rect camera = {0, 0, SCREEN_WIDTH, SCREEN_HEIGHT};
+            //scrolling offset
+            int scrollingOffset = 0;
 
             while (!quit)
             {
@@ -154,29 +154,31 @@ int main(int argc, char *argv[])
                 //update the position of the dot
                 dot.dot_move();
 
-                //center camera over the dot
-                camera.x = dot.getPosX() + Dot :: DOT_WIDTH / 2 - SCREEN_WIDTH / 2;
-                camera.y = dot.getPosY() + Dot :: DOT_HEIGHT / 2 - SCREEN_HEIGHT / 2;
-
-                //keep the camera in bounds
-                if (camera.x < 0)   camera.x = 0;
-                if (camera.x + camera.w > LEVEL_WIDTH ) camera.x = LEVEL_WIDTH - camera.w;
-                if (camera.y < 0)   camera.y = 0;
-                if (camera.y + camera.h > LEVEL_HEIGHT)    camera.y = LEVEL_HEIGHT - camera.h;
+                //reset motion
+                if (scrollingOffset < -gBGTexture.getWidth()){
+                    scrollingOffset = 0;
+                }
 
                 //clear screen
                 SDL_SetRenderDrawColor(gRenderer, 255, 255, 255, 255);
                 SDL_RenderClear(gRenderer);
 
                 //render texture
-                //background first
-                gBGTexture.render(0, 0, &camera);
+
+                //the left part of the background
+                gBGTexture.render(scrollingOffset, 0);
+
+                //the right part of the backround
+                gBGTexture.render(scrollingOffset + gBGTexture.getWidth(), 0);
 
                 //dot later
-                dot.render(camera.x, camera.y);
+                dot.render();
 
                 //update screen
                 SDL_RenderPresent(gRenderer);
+
+                //the background move from left to right
+                scrollingOffset--;
             }
         }
     }
@@ -352,7 +354,7 @@ void Dot :: dot_move(){
     mPosX += mVelX;
 
     //if the dot collided or move too far to the left or right
-    if (mPosX < 0 || mPosX + DOT_WIDTH > LEVEL_WIDTH){
+    if (mPosX < 0 || mPosX + DOT_WIDTH > SCREEN_WIDTH){
         mPosX -= mVelX;
     }
 
@@ -360,14 +362,14 @@ void Dot :: dot_move(){
     mPosY += mVelY;
 
     //if the dot move too far to up or down
-    if (mPosY < 0 || mPosY + DOT_HEIGHT > LEVEL_HEIGHT ){
+    if (mPosY < 0 || mPosY + DOT_HEIGHT > SCREEN_HEIGHT ){
         mPosY -= mVelY;
     }
 }
-void Dot :: render(int camX, int camY)
+void Dot :: render()
 {
     //show the dot relative to the camera
-    gDotTexture.render(mPosX - camX, mPosY - camY);
+    gDotTexture.render(mPosX, mPosY);
 }
 
 int Dot :: getPosX()
@@ -440,6 +442,7 @@ bool loadMedia()
         cout << "failed to load dot media\n";
         success = false;
     }
+    //background
     if (!gBGTexture.loadFromFile("C:/learnSDL2/SDL2_test/media and etc/bg.png"))
     {
         cout << "failed to load bg texture\n";
