@@ -2,6 +2,7 @@
 #include <SDL.h>
 #include <SDL_image.h>
 #include <SDL_mixer.h>
+#include <SDL_ttf.h>
 
 using namespace std;
 
@@ -56,41 +57,6 @@ public:
     int getHeight();
 };
 
-class Dot{
-private:
-    //position
-    int mPosX;
-    int mPosY;
-
-    //velocity
-    int mVelX;
-    int mVelY;
-
-public:
-    //the dimension of dot
-    static const int DOT_WIDTH = 20;
-    static const int DOT_HEIGHT = 20;
-
-    //maximum axis velocity of the dot
-    static const int DOT_VEL = 10;
-
-    //constructor
-    Dot(int _x, int _y);
-
-    //adjust velocity through handle event
-    void handle_event(SDL_Event &e);
-
-    //moves the dot and checks collision
-    void dot_move();
-
-    //show the dot on the screen, the position relative to the camera
-    void render();
-
-    //get position
-    int getPosX();
-    int getPosY();
-};
-
 
 //the window we'll be rendering to
 SDL_Window* gWindow = NULL;
@@ -98,10 +64,12 @@ SDL_Window* gWindow = NULL;
 //the window renderer
 SDL_Renderer* gRenderer = NULL;
 
-//fps texture
-LTexture gDotTexture;
+//the font used in this program
+TTF_Font *gFont = NULL;
 
-LTexture gBGTexture;
+//texture
+LTexture gPromptTexture;
+LTexture gInputTextTexture;
 
 bool init();
 
@@ -132,16 +100,27 @@ int main(int argc, char *argv[])
         {
             //event handler
             SDL_Event e;
+
+            //quit flag
             bool quit = false;
 
-            //the dot move around the window
-            Dot dot(0, 0);
+            //set text color as black
+            SDL_Color textColor = {0, 0, 0, 255};
 
-            //scrolling offset
-            int scrollingOffset = 0;
+            //the current input text
+            string inputText = "Some text";
+            if(!gInputTextTexture.loadFromRenderedText(inputText, textColor))
+            {
+                cout << "failed to load inputText\n";
+            }
+
+            //enable text input
+            SDL_StartTextInput();
 
             while (!quit)
             {
+                //the rerender text flag
+                bool textRender = false;
 
                 while (SDL_PollEvent(&e)) // handle events on queue
                 {   //user request quit
@@ -149,36 +128,61 @@ int main(int argc, char *argv[])
                     {
                         quit = true;
                     }
-                    dot.handle_event(e);
-                }
-                //update the position of the dot
-                dot.dot_move();
+                    else if (e.type == SDL_KEYDOWN){
+                        //handle backspace
+                        if (e.key.keysym.sym == SDLK_BACKSPACE && inputText.size() > 0){
+                            //lop off character
+                            inputText.pop_back();
+                            textRender = true;
+                        }
+                        //handle copy
+                        else if (e.key.keysym.sym == SDLK_c && SDL_GetModState() & KMOD_CTRL){
+                            SDL_SetClipboardText(inputText.c_str());
+                        }
 
-                //reset motion
-                if (scrollingOffset < -gBGTexture.getWidth()){
-                    scrollingOffset = 0;
+                        //handle paste
+                        else if(e.key.keysym.sym == SDLK_v && SDL_GetModState() & KMOD_CTRL){
+                            char *clipBoardText = SDL_GetClipboardText();
+                            inputText += clipBoardText;
+                            SDL_free(clipBoardText);
+                            textRender = true;
+                        }
+                    }
+                    //when we press a key, sdl will generate two event : sdl key down and sdl text input
+                    else if (e.type == SDL_TEXTINPUT){
+                        inputText.append(e.text.text);
+                        textRender = true;
+                    }
+                }
+
+                //rerender text if needed
+                if (textRender){
+                    //text is not empty
+                    if (inputText.size() > 0){
+                        if (!gInputTextTexture.loadFromRenderedText(inputText, textColor))
+                        {
+                            cout << "failed to load input text\n";
+                        }
+                    }
+                    else{
+                        //text is empty (ttf does not render empty string)
+                        if (!gInputTextTexture.loadFromRenderedText(" ", textColor))
+                        {
+                            cout << "failed to load input text\n";
+                        }
+                    }
+
                 }
 
                 //clear screen
                 SDL_SetRenderDrawColor(gRenderer, 255, 255, 255, 255);
                 SDL_RenderClear(gRenderer);
 
-                //render texture
-
-                //the left part of the background
-                gBGTexture.render(scrollingOffset, 0);
-
-                //the right part of the backround
-                gBGTexture.render(scrollingOffset + gBGTexture.getWidth(), 0);
-
-                //dot later
-                dot.render();
+                gPromptTexture.render((SCREEN_WIDTH - gPromptTexture.getWidth()) / 2, 0);
+                gInputTextTexture.render((SCREEN_WIDTH - gInputTextTexture.getWidth()) / 2, gPromptTexture.getHeight());
 
                 //update screen
                 SDL_RenderPresent(gRenderer);
-
-                //the background move from left to right
-                scrollingOffset--;
             }
         }
     }
@@ -314,73 +318,6 @@ int LTexture :: getHeight()
     return this->mHeight;
 }
 
-Dot :: Dot(int _x, int _y)
-{
-    //initialize dot's offset
-    mPosX = _x;
-    mPosY = _y;
-
-    //initialize dot's velocity
-    mVelX = 0;
-    mVelY = 0;
-
-}
-
-void Dot :: handle_event(SDL_Event &e){
-    //ignore repeated key down
-    //if key is pressed
-    if (e.type == SDL_KEYDOWN && e.key.repeat == 0){
-        switch (e.key.keysym.sym){
-            case SDLK_UP: mVelY -= DOT_VEL; break;
-            case SDLK_DOWN: mVelY += DOT_VEL; break;
-            case SDLK_RIGHT: mVelX += DOT_VEL; break;
-            case SDLK_LEFT: mVelX -= DOT_VEL; break;
-        }
-    }
-    //if key is released
-    else if (e.type == SDL_KEYUP && e.key.repeat == 0){
-        switch (e.key.keysym.sym){
-            case SDLK_UP: mVelY += DOT_VEL; break;
-            case SDLK_DOWN: mVelY -= DOT_VEL; break;
-            case SDLK_RIGHT: mVelX -= DOT_VEL; break;
-            case SDLK_LEFT: mVelX += DOT_VEL; break;
-        }
-    }
-}
-
-//update position
-void Dot :: dot_move(){
-    //move the dot left or right
-    mPosX += mVelX;
-
-    //if the dot collided or move too far to the left or right
-    if (mPosX < 0 || mPosX + DOT_WIDTH > SCREEN_WIDTH){
-        mPosX -= mVelX;
-    }
-
-    //move the dot up or down
-    mPosY += mVelY;
-
-    //if the dot move too far to up or down
-    if (mPosY < 0 || mPosY + DOT_HEIGHT > SCREEN_HEIGHT ){
-        mPosY -= mVelY;
-    }
-}
-void Dot :: render()
-{
-    //show the dot relative to the camera
-    gDotTexture.render(mPosX, mPosY);
-}
-
-int Dot :: getPosX()
-{
-    return mPosX;
-}
-
-int Dot :: getPosY()
-{
-    return mPosY;
-}
 
 bool init()
 {
@@ -427,6 +364,10 @@ bool init()
                     cout << "failed to initialize sdl mixed. ERROR: " << Mix_GetError() << endl;
                     success = false;
                 }
+                if (TTF_Init() < 0){
+                    cout << "failed to init true type font\n. ERROR: " << TTF_GetError() << endl;
+                    success = false;
+                }
             }
         }
     }
@@ -436,16 +377,13 @@ bool init()
 bool loadMedia()
 {
     bool success = true;
-
-    //upload dot media
-    if (!gDotTexture.loadFromFile("C:/learnSDL2/SDL2_test/media and etc/dot.bmp")){
-        cout << "failed to load dot media\n";
+    gFont = TTF_OpenFont("lazy.ttf", 28);
+    if (gFont == NULL){
+        cout << "failed to load ttf\n";
         success = false;
     }
-    //background
-    if (!gBGTexture.loadFromFile("C:/learnSDL2/SDL2_test/media and etc/bg.png"))
-    {
-        cout << "failed to load bg texture\n";
+    if (!gPromptTexture.loadFromRenderedText("Enter text:", {0, 0, 0, 255})){
+        cout << "failed to load prompt text texture\n";
         success = false;
     }
     return success;
@@ -453,8 +391,7 @@ bool loadMedia()
 
 void close_program()
 {
-    //free texture
-    gDotTexture.free();
+    gFont = NULL;
 
     //destroy render
     SDL_DestroyRenderer(gRenderer);
@@ -464,7 +401,9 @@ void close_program()
     SDL_DestroyWindow(gWindow);
     gWindow = NULL;
 
+    SDL_StopTextInput();
+
     SDL_Quit();
     IMG_Quit();
-//    TTF_Quit();
+    TTF_Quit();
 }
