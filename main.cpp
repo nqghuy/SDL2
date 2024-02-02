@@ -10,8 +10,8 @@ using namespace std;
 const int SCREEN_WIDTH = 640;
 const int SCREEN_HEIGHT = 480;
 
-const int LEVEL_WIDTH = 1280;
-const int LEVEL_HEIGHT = 960;
+//the number of data
+const int TOTAL_DATA = 10;
 
 class LTexture
 {
@@ -69,7 +69,10 @@ TTF_Font *gFont = NULL;
 
 //texture
 LTexture gPromptTexture;
-LTexture gInputTextTexture;
+
+LTexture gDataTextures [TOTAL_DATA];
+
+int gData[ TOTAL_DATA ];
 
 bool init();
 
@@ -107,15 +110,14 @@ int main(int argc, char *argv[])
             //set text color as black
             SDL_Color textColor = {0, 0, 0, 255};
 
-            //the current input text
-            string inputText = "Some text";
-            if(!gInputTextTexture.loadFromRenderedText(inputText, textColor))
-            {
-                cout << "failed to load inputText\n";
-            }
+            //set current data as red
+            SDL_Color hightLight = {255, 0, 0, 255};
 
             //enable text input
             SDL_StartTextInput();
+
+            //current input point
+            int currentData = 0;
 
             while (!quit)
             {
@@ -129,57 +131,47 @@ int main(int argc, char *argv[])
                         quit = true;
                     }
                     else if (e.type == SDL_KEYDOWN){
-                        //handle backspace
-                        if (e.key.keysym.sym == SDLK_BACKSPACE && inputText.size() > 0){
-                            //lop off character
-                            inputText.pop_back();
-                            textRender = true;
+                        switch (e.key.keysym.sym)
+                        {
+                        case SDLK_DOWN:
+                            //rerender previous entry input point
+                            gDataTextures[currentData].loadFromRenderedText(to_string(gData[currentData]), textColor);
+                            currentData++;
+                            break;
+                        case SDLK_UP:
+                            //rerender previous entry input point
+                            gDataTextures[currentData].loadFromRenderedText(to_string(gData[currentData]), textColor);
+                            currentData--;
+                            break;
+                        case SDLK_RIGHT:
+                            gData[currentData]++;
+                            break;
+                        case SDLK_LEFT:
+                            gData[currentData]--;
+                            break;
                         }
-                        //handle copy
-                        else if (e.key.keysym.sym == SDLK_c && SDL_GetModState() & KMOD_CTRL){
-                            SDL_SetClipboardText(inputText.c_str());
+                        if (currentData < 0){
+                            currentData = 9;
                         }
-
-                        //handle paste
-                        else if(e.key.keysym.sym == SDLK_v && SDL_GetModState() & KMOD_CTRL){
-                            char *clipBoardText = SDL_GetClipboardText();
-                            inputText += clipBoardText;
-                            SDL_free(clipBoardText);
-                            textRender = true;
+                        else if (currentData == 10){
+                            currentData = 0;
                         }
-                    }
-                    //when we press a key, sdl will generate two event : sdl key down and sdl text input
-                    else if (e.type == SDL_TEXTINPUT){
-                        inputText.append(e.text.text);
-                        textRender = true;
                     }
                 }
-
-                //rerender text if needed
-                if (textRender){
-                    //text is not empty
-                    if (inputText.size() > 0){
-                        if (!gInputTextTexture.loadFromRenderedText(inputText, textColor))
-                        {
-                            cout << "failed to load input text\n";
-                        }
-                    }
-                    else{
-                        //text is empty (ttf does not render empty string)
-                        if (!gInputTextTexture.loadFromRenderedText(" ", textColor))
-                        {
-                            cout << "failed to load input text\n";
-                        }
-                    }
-
-                }
+                gDataTextures[currentData].loadFromRenderedText(to_string(gData[currentData]), hightLight);
 
                 //clear screen
                 SDL_SetRenderDrawColor(gRenderer, 255, 255, 255, 255);
                 SDL_RenderClear(gRenderer);
 
+                //prompt texture
                 gPromptTexture.render((SCREEN_WIDTH - gPromptTexture.getWidth()) / 2, 0);
-                gInputTextTexture.render((SCREEN_WIDTH - gInputTextTexture.getWidth()) / 2, gPromptTexture.getHeight());
+
+                for (int i = 0; i < 10; i++){
+                    gDataTextures[i].render((SCREEN_WIDTH - gDataTextures[i].getHeight()) /2, gPromptTexture.getHeight() + gDataTextures[i].getHeight() * i);
+                }
+                SDL_RenderPresent(gRenderer);
+
 
                 //update screen
                 SDL_RenderPresent(gRenderer);
@@ -377,21 +369,76 @@ bool init()
 bool loadMedia()
 {
     bool success = true;
-    gFont = TTF_OpenFont("lazy.ttf", 28);
+
+    //open font
+    gFont = TTF_OpenFont("media and etc/lazy.ttf", 28);
     if (gFont == NULL){
         cout << "failed to load ttf\n";
         success = false;
     }
+
+    //create prompt texture
     if (!gPromptTexture.loadFromRenderedText("Enter text:", {0, 0, 0, 255})){
         cout << "failed to load prompt text texture\n";
         success = false;
+    }
+
+    //open file
+    SDL_RWops *file = SDL_RWFromFile("nums.bin", "r+b");
+
+    //if file does not exist
+    if (file == NULL)
+    {
+        cout << "Warning: unable to open file\n";
+
+        //create a new file
+        file = SDL_RWFromFile("nums.bin", "w+b");
+        if (file == NULL){
+            cout << "failed to create file\n";
+            success = false;
+        }
+        //create successful
+        else {
+            cout << "new file created\n";
+            for (int i = 0; i < 10; i++){
+                gData[i] = 0;
+                SDL_RWwrite(file, &gData[i], sizeof(int), 1);
+                SDL_RWclose(file);
+            }
+        }
+    }
+    //if file exists
+    else{
+        //copy data
+        for (int i = 0; i < 10; i++){
+            SDL_RWread(file, &gData[i], sizeof(int), 1);
+        }
+        SDL_RWclose(file);
+    }
+
+    //initialize data texture
+    for (int i = 0; i < 10; i++){
+        gDataTextures[i].loadFromRenderedText(to_string(gData[i]), {0, 0, 0, 255});
     }
     return success;
 }
 
 void close_program()
 {
+    //write data in file
+    SDL_RWops *file = SDL_RWFromFile("nums.bin", "w");
+    for (int i = 0; i < 10; i++){
+        SDL_RWwrite(file, &gData[i], sizeof(int), 1);
+    }
+    SDL_RWclose(file);
+
     gFont = NULL;
+
+    //free texture
+    for (int i = 0; i < 10; i++){
+        gDataTextures[i].free();
+    }
+    gPromptTexture.free();
 
     //destroy render
     SDL_DestroyRenderer(gRenderer);
